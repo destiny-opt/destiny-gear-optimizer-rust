@@ -3,9 +3,9 @@
 #[macro_use]
 extern crate lazy_static;
 
-use std::iter::FromIterator;
 use smallvec::SmallVec;
 use dashmap::DashMap;
+use std::collections::HashMap;
 
 use rayon::prelude::*;
 
@@ -28,7 +28,7 @@ fn main() {
     let config = Configuration {
         powerful_cap: 1050,
         pinnacle_cap: 1060,
-        actions: [
+        actions: vec![
             Action { powerful_gain: 5, pinnacle_gain: 1, arity: 4, pmf: default_pmf },
             Action { powerful_gain: 5, pinnacle_gain: 2, arity: 3, pmf: default_pmf },
             Action { powerful_gain: 5, pinnacle_gain: 2, arity: 2, pmf: armor_pmf },
@@ -46,12 +46,18 @@ fn main() {
     let mut progress = 0;
     let total = ranks.iter().map(|x| x.len()).sum::<usize>();
 
-    let state = DashMap::with_capacity(total * 10 * 6435); // 10: power levels, 6435: k-combinations; just quick and dirty..
+    let full_state = DashMap::with_capacity(total); // 10: power levels, 6435: k-combinations; just quick and dirty..
 
     for acts in ranks {
-        acts.par_iter().for_each(|act| build_states(&config, &state, &SmallVec::from_vec(act.to_vec())));
+        acts.par_iter().for_each(|act| {
+            let actarr = SmallVec::from_vec(act.to_vec());
+            let mut current_state = HashMap::with_capacity(10 * 6435);
+            build_states(&config, &full_state, &mut current_state, &actarr);
+            //current_state.shrink_to_fit();
+            full_state.insert(actarr, current_state);
+        });
         progress += acts.len();
         println!("Actions: {}/{}", progress, total);
     }
-    println!("State size: {:?}", state.len());
+    println!("State size: {:?}", full_state.iter().map(|x| x.len()).sum::<usize>());
 }
