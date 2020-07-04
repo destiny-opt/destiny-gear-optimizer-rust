@@ -7,7 +7,7 @@ use crate::utils;
 
 use packed_simd::*;
 
-pub type PowerLevel = i32;
+pub type PowerLevel = i16;
 
 pub struct Configuration {
     pub actions : Vec<Action>,
@@ -40,14 +40,12 @@ pub enum Slot {
 }
 
 // general purpose slot table
-pub struct SlotTable { 
-    vec: [i32; 8]
-}
+pub type SlotTable = i16x8;
 
-#[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct StateEntry {
     pub mean : u16,
-    pub mean_slot_deviation : [i8; Slot::NumberOfSlots as usize],
+    pub mean_slot_deviation : i8x8,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, PartialOrd)]
@@ -65,7 +63,7 @@ pub type FullMDPState = DashMap<ActionArity, CurrentMDPState>;
 
 /// Select an action from an already generated table.
 pub fn select_action(config: &Configuration, full_state: &FullMDPState, se: &StateEntry, available_actions: &ActionArity) -> Option<StateTransition> {
-    if (se.mean as i32) >= config.pinnacle_cap || available_actions.wrapping_sum() == 0 {
+    if (se.mean as PowerLevel) >= config.pinnacle_cap || available_actions.wrapping_sum() == 0 {
         return None;
     }
 
@@ -112,28 +110,22 @@ pub fn update_state_entry(config: &Configuration, se: &StateEntry, aa: &ActionAr
 
     // get full slot table
     
-    let mut slots = SlotTable { vec: [0; 8] };
+    let mut slots = SlotTable::from_cast(i8x8::from(se.mean_slot_deviation)) + se.mean as PowerLevel;
 
-    for i in 0..slots.vec.len() {
-        slots.vec[i] = se.mean_slot_deviation[i] as i32 + se.mean as i32;
-    }
 
-    let old_slot = slots.vec[slot_idx];
+    let old_slot = slots.extract(slot_idx);
     let new_slot = power_gain(config, &action, old_slot);
     let reward = (new_slot - old_slot) as f32;
 
-    slots.vec[slot_idx] = new_slot;
+    slots = slots.replace(slot_idx, new_slot);
 
     // flatten and calculate new mean (we don't consider flattening a reward really)
 
-    full_flatten(&mut slots);
+    slots = full_flatten(slots);
 
-    let new_mean = current_level(&slots);
+    let new_mean = current_level(slots);
 
-    let mut new_msd = [0; 8];
-    for i in 0..new_msd.len() {
-        new_msd[i] = (slots.vec[i] - new_mean) as i8;
-    }
+    let new_msd = i8x8::from_cast(slots - new_mean);
 
     let new_se = StateEntry {
         mean: new_mean as u16,
@@ -143,7 +135,7 @@ pub fn update_state_entry(config: &Configuration, se: &StateEntry, aa: &ActionAr
     (new_se, new_aa, reward)
 }
 
-pub fn power_gain(config: &Configuration, action: &Action, old_slot: i32) -> i32 {
+pub fn power_gain(config: &Configuration, action: &Action, old_slot: PowerLevel) -> PowerLevel {
     if old_slot < config.powerful_cap {
         // this models behavior at the transition region (e.g. +2 pinnacle at 1047 light gives 1052, +1 or +2 pinnacle at 1046 gives 1051, +2 at 1049 gives 1052)
         min(old_slot + action.powerful_gain, config.powerful_cap + action.pinnacle_gain)
@@ -156,32 +148,20 @@ pub fn power_gain(config: &Configuration, action: &Action, old_slot: i32) -> i32
     }
 }
 
-pub fn current_level(slots: &SlotTable) -> i32 {
-    slots.vec.iter().sum::<i32>() / (slots.vec.len() as i32)
+pub fn current_level(slots: SlotTable) -> PowerLevel {
+    slots.wrapping_sum() / (SlotTable::lanes() as PowerLevel)
 }
 
-// returns true if flattening did something
-pub fn flatten(slots: &mut SlotTable) -> bool {
-    let current = current_level(slots);
-    let mut success = false;
-    for x in slots.vec.iter_mut() {
-        if *x < current {
-            success = true;
-            *x = current;
-        }
+pub fn full_flatten(slots: SlotTable) -> SlotTable {
+    let mut slots_mut = slots;
+    let mut current = current_level(slots);
+
+    while slots_mut.min_element() < current {
+        slots_mut = slots_mut.max(SlotTable::splat(current));
+        current = current_level(slots_mut);
     }
-    return success;
+    slots_mut
 }
-
-pub fn full_flatten(slots: &mut SlotTable) {
-    while flatten(slots) {
-        // blank (this terminates, i swear)
-    }
-}
-
-
-
-
 
 // Bottom-up building (as ordered by available actions)
 

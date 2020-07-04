@@ -1,14 +1,12 @@
-#![feature(const_generics)]
-
 #[macro_use]
 extern crate lazy_static;
 
-use smallvec::SmallVec;
 use dashmap::DashMap;
 use std::collections::HashMap;
 
 use rayon::prelude::*;
 
+use packed_simd::*;
 
 pub mod core;
 mod utils;
@@ -32,10 +30,7 @@ fn main() {
         for msd in ALL_MSDS.iter() {
             for mean in powerful_cap..pinnacle_cap {
                 if msd.iter().all(|x| (*x as PowerLevel) + mean <= pinnacle_cap) {
-                    let mut msd_arr = [0; 8];
-                    for i in 0..msd_arr.len() {
-                        msd_arr[i] = msd[i] as i8;
-                    }
+                    let msd_arr = i8x8::from_cast(u8x8::from_slice_aligned(msd.as_slice()));
                     entries.push(StateEntry { 
                         mean: mean as u16,
                         mean_slot_deviation: msd_arr
