@@ -12,7 +12,9 @@ pub type PowerLevel = i32;
 pub struct Configuration {
     pub actions : Vec<Action>,
     pub powerful_cap : PowerLevel,
-    pub pinnacle_cap : PowerLevel
+    pub pinnacle_cap : PowerLevel,
+
+    pub all_entries: Vec<StateEntry>
 }
 
 #[derive(Debug, Clone,  PartialEq)]
@@ -187,23 +189,11 @@ pub fn full_flatten(slots: &mut SlotTable) {
 // Bottom-up building (as ordered by available actions)
 
 lazy_static! {
-    static ref ALL_MSDS: std::vec::Vec<std::vec::Vec<u8>> = utils::compositions(8, 8);
+    pub static ref ALL_MSDS: std::vec::Vec<std::vec::Vec<u8>> = utils::compositions(8, 8);
 }
 
 pub fn build_states(config: &Configuration, full_state: &FullMDPState, current_state: &mut CurrentMDPState, actions: &SmallVec<[u8; 16]>) {
-    for msd in ALL_MSDS.iter() {
-        for mean in config.powerful_cap..config.pinnacle_cap {
-            if msd.iter().all(|x| (*x as PowerLevel) + mean <= config.pinnacle_cap) {
-                let mut msd_arr = [0; 8];
-                for i in 0..msd_arr.len() {
-                    msd_arr[i] = msd[i] as i8;
-                }
-                let se = StateEntry { 
-                    mean: mean as u16,
-                    mean_slot_deviation: msd_arr
-                };
-                create_action(config, full_state, current_state, se, actions);
-            }
-        }
+    for se in &config.all_entries {
+        create_action(config, full_state, current_state, se.clone(), actions);
     }
 }
