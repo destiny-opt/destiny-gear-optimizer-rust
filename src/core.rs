@@ -1,11 +1,11 @@
 use std::cmp::min;
-use std::cmp::Ordering;
 
-use smallvec::SmallVec;
-use dashmap::{DashMap, ReadOnlyView};
+use dashmap::DashMap;
 use std::collections::HashMap;
 
 use crate::utils;
+
+use packed_simd::*;
 
 pub type PowerLevel = i32;
 
@@ -56,7 +56,7 @@ pub struct StateTransition {
     pub score : f32
 }
 
-pub type ActionArity = SmallVec<[u8; 16]>;
+pub type ActionArity = i8x16;
 
 /// full access to the currently computed action
 pub type CurrentMDPState = HashMap<StateEntry, StateTransition>;
@@ -65,7 +65,7 @@ pub type FullMDPState = DashMap<ActionArity, CurrentMDPState>;
 
 /// Select an action from an already generated table.
 pub fn select_action(config: &Configuration, full_state: &FullMDPState, se: &StateEntry, available_actions: &ActionArity) -> Option<StateTransition> {
-    if (se.mean as i32) >= config.pinnacle_cap || available_actions.iter().sum::<u8>() == 0 {
+    if (se.mean as i32) >= config.pinnacle_cap || available_actions.wrapping_sum() == 0 {
         return None;
     }
 
@@ -77,8 +77,7 @@ pub fn select_action(config: &Configuration, full_state: &FullMDPState, se: &Sta
 /// Create an action.
 /// Note: this MUST be called in ascending rank or it will runtime error
 pub fn create_action(config: &Configuration, full_state: &FullMDPState, current_state: &mut CurrentMDPState, se: StateEntry, available_actions: &ActionArity) {
-    let on_action = |args| -> StateTransition {
-        let (idx, _arity) = args;
+    let on_action = |idx| -> StateTransition {
         let action: &Action = &config.actions[idx];
 
         let outcomes = action.pmf.iter().enumerate().filter(|(_i,x)| **x > 0.0)
@@ -93,25 +92,23 @@ pub fn create_action(config: &Configuration, full_state: &FullMDPState, current_
         }
     };
 
-    let st = available_actions.iter().enumerate()
-        .filter(|(_i,x)| **x > 0)
-        .map(on_action)
-        .max_by(|x, y| x.score.partial_cmp(&y.score).unwrap_or(Ordering::Equal));
-    match st {
-        Some(st) => { current_state.insert(se, st); },
-        None => {}
-    };
-    
-
-    
+    let mut max_st = StateTransition { next_action: 0, score: 0.0 };
+    for i in 0..ActionArity::lanes() {
+        if available_actions.extract(i) > 0 {
+            let new_st = on_action(i);
+            if new_st.score >= max_st.score {
+                max_st = new_st;
+            }
+        }
+    }
+     current_state.insert(se, max_st); 
 }
 
 pub fn update_state_entry(config: &Configuration, se: &StateEntry, aa: &ActionArity, slot_idx: usize, act_idx: usize) -> (StateEntry, ActionArity, f32) {
     let action = &config.actions[act_idx];
 
     // update actions
-    let mut new_aa = aa.clone();
-    new_aa[act_idx] -= 1;
+    let new_aa = aa.replace(act_idx, aa.extract(act_idx) - 1);
 
     // get full slot table
     
@@ -192,7 +189,7 @@ lazy_static! {
     pub static ref ALL_MSDS: std::vec::Vec<std::vec::Vec<u8>> = utils::compositions(8, 8);
 }
 
-pub fn build_states(config: &Configuration, full_state: &FullMDPState, current_state: &mut CurrentMDPState, actions: &SmallVec<[u8; 16]>) {
+pub fn build_states(config: &Configuration, full_state: &FullMDPState, current_state: &mut CurrentMDPState, actions: &ActionArity) {
     for se in &config.all_entries {
         create_action(config, full_state, current_state, se.clone(), actions);
     }

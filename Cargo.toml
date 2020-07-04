@@ -16,3 +16,6 @@ features = ["union", "const_generics"]
 
 [profile.release]
 debug = true
+
+[build]
+rustflags = ["-C target-cpu=native"]

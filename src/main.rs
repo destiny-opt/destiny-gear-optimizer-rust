@@ -75,7 +75,10 @@ fn main() {
 
     for acts in ranks {
         acts.par_iter().for_each(|act| {
-            let actarr = SmallVec::from_vec(act.to_vec());
+            let mut actarr = ActionArity::splat(0);
+            for i in 0..act.len() {
+                actarr = actarr.replace(i, act[i] as i8);
+            }
             let mut current_state: CurrentMDPState = HashMap::with_capacity(se_len);
             build_states(&config, &full_state, &mut current_state, &actarr);
             //current_state.shrink_to_fit();
