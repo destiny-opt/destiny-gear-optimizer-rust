@@ -4,6 +4,8 @@ use std::iter::FromIterator;
 use smallvec::SmallVec;
 use dashmap::DashMap;
 
+use rayon::prelude::*;
+
 
 pub mod core;
 mod utils;
@@ -36,13 +38,17 @@ fn main() {
     };
 
     let cap = config.actions.iter().map(|x| x.arity ).collect();
-    let state = DashMap::new();
+    let ranks = utils::ranked_actions(&cap);
+    
+    let mut progress = 0;
+    let total = ranks.iter().map(|x| x.len()).sum::<usize>();
 
-    for acts in utils::ranked_actions(&cap) {
-        for act in &acts {
-            build_states(&config, &state, &SmallVec::from_vec(act.to_vec()));
-        }
-        println!("Actions: {:?}", acts.len());
+    let state = DashMap::with_capacity(total * 10 * 6435); // 10: power levels, 6435: k-combinations; just quick and dirty..
+
+    for acts in ranks {
+        acts.par_iter().for_each(|act| build_states(&config, &state, &SmallVec::from_vec(act.to_vec())));
+        progress += acts.len();
+        println!("Actions: {}/{}", progress, total);
     }
     println!("State size: {:?}", state.len());
 }
