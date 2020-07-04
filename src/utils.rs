@@ -1,4 +1,5 @@
 use std::vec::Vec;
+use std::collections::HashSet;
 
 /// Weak k-compositions that sum up to <n
 pub fn compositions(n: u8, k: usize) -> Vec<Vec<u8>>  {
@@ -24,27 +25,47 @@ pub fn compositions(n: u8, k: usize) -> Vec<Vec<u8>>  {
 }
 
 /// Actions up to some cap
-pub fn ranked_actions(cap: &Vec<u8>) -> Vec<Vec<Vec<u8>>> {
+pub fn ranked_actions(cap: &Vec<u8>) -> Vec<HashSet<Vec<u8>>> {
 
-    // sorry i have the terminal haskell disease :(
-    fn go(cap: &Vec<u8>, n: u8) -> Vec<Vec<Vec<u8>>> {
+    let upper = cap.iter().sum();
+    // ordered [1..upper]
+    let mut result = Vec::with_capacity(cap.iter().sum::<u8>() as usize);
+
+    for i in 1..=upper {
+        result.push(go(cap, i));
+    }
+
+    
+    fn go(cap: &Vec<u8>, n: u8) -> HashSet<Vec<u8>> {
         let sum: u8 = cap.iter().sum();
-        if sum == n { 
-            return vec![ vec![ cap.clone() ] ];
+
+        let mut output: HashSet<Vec<u8>> = HashSet::new();
+
+        // only one 0-sum
+        if n == 0 {
+            output.insert(vec![0; cap.len()]);
+            return output;
         }
 
-        let mut output: Vec<Vec<Vec<u8>>> = Vec::new();
+        // only one (sum cap)-sum
+        if n == sum {
+            output.insert(cap.to_vec());
+            return output;
+        }
 
-        let cur_rank: Vec<Vec<u8>> = compositions(n+1, cap.len()).into_iter()
-                .filter(|xs| xs.iter().sum::<u8>() == n)
-                .filter(|xs| xs.iter().zip(cap).all(|(a,b)| *a <= *b))
-                .collect();
-        
-        output.push(cur_rank);
+        let previous = go(cap, n-1);
 
-        output.append(&mut go(cap, n+1));
+        for elem in previous {
+            for i in 0..cap.len() {
+                let mut new_elem = elem.clone();
+                if new_elem[i] < cap[i] {
+                    new_elem[i] += 1;
+                    output.insert(new_elem);
+                }
+            }
+        }
         output
     };
 
-    go(cap, 1)
+    result
 }
