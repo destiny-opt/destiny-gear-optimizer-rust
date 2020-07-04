@@ -1,5 +1,8 @@
 #![feature(const_generics)]
 
+#[macro_use]
+extern crate lazy_static;
+
 use std::iter::FromIterator;
 use smallvec::SmallVec;
 use dashmap::DashMap;

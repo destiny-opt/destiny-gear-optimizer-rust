@@ -175,8 +175,12 @@ pub fn full_flatten<const N: usize>(slots: &mut SlotTable<N>) {
 
 // Bottom-up building (as ordered by available actions)
 
+lazy_static! {
+    static ref ALL_MSDS: std::vec::Vec<std::vec::Vec<u8>> = utils::compositions(8, 8);
+}
+
 pub fn build_states<const N: usize>(config: &Configuration<N>, state: &MDPState<N>, actions: &SmallVec<[u8; N]>) {
-    for msd in utils::compositions(8, 8) {
+    for msd in ALL_MSDS.iter() {
         for mean in config.powerful_cap..=config.pinnacle_cap-1 {
             if msd.iter().all(|x| (*x as PowerLevel) + mean < config.pinnacle_cap) {
                 let se = StateEntry { 
