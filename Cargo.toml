@@ -10,12 +10,6 @@ dashmap = "3.11.5"
 lazy_static = "1.4.0"
 packed_simd = "0.3.3"
 
-[dependencies.smallvec]
-version = "1.4.0"
-features = ["union", "const_generics"]
-
 [profile.release]
 debug = true
-
-[build]
-rustflags = ["-C target-cpu=native"]
+lto = true
