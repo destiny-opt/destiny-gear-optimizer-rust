@@ -39,14 +39,14 @@ pub enum Slot {
 }
 
 // general purpose slot table
-pub struct SlotTable<const N: usize> { 
-    vec: SmallVec<[i32; N]> 
+pub struct SlotTable { 
+    vec: [i32; 8]
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct StateEntry<const N: usize> {
     pub mean : u16,
-    pub mean_slot_deviation : SmallVec<[i8; Slot::NumberOfSlots as usize]>,
+    pub mean_slot_deviation : [i8; Slot::NumberOfSlots as usize],
     pub available_actions : SmallVec<[u8; N]>
 }
 
@@ -104,9 +104,12 @@ pub fn update_state_entry<const N: usize>(config: &Configuration<N>, se: &StateE
     new_aa[act_idx] -= 1;
 
     // get full slot table
-    let mut slots = SlotTable { vec: SmallVec::from_iter(se.mean_slot_deviation.iter()
-        .map(|x| *x as i32 + se.mean as i32)) 
-    };
+    
+    let mut slots = SlotTable { vec: [0; 8] };
+
+    for i in 0..slots.vec.len() {
+        slots.vec[i] = se.mean_slot_deviation[i] as i32 + se.mean as i32;
+    }
 
     let old_slot = slots.vec[slot_idx];
     let new_slot = power_gain(config, &action, old_slot);
@@ -116,13 +119,14 @@ pub fn update_state_entry<const N: usize>(config: &Configuration<N>, se: &StateE
 
     // flatten and calculate new mean (we don't consider flattening a reward really)
 
-    full_flatten::<N>(&mut slots);
+    full_flatten(&mut slots);
 
     let new_mean = current_level(&slots);
 
-    let new_msd = SmallVec::from_iter(
-        slots.vec.into_iter().map(|x| (x - new_mean) as i8)
-    );
+    let mut new_msd = [0; 8];
+    for i in 0..new_msd.len() {
+        new_msd[i] = (slots.vec[i] - new_mean) as i8;
+    }
 
     let new_se = StateEntry {
         mean: new_mean as u16,
@@ -146,12 +150,12 @@ pub fn power_gain<const N: usize>(config: &Configuration<N>, action: &Action, ol
     }
 }
 
-pub fn current_level<const N: usize>(slots: &SlotTable<N>) -> i32 {
+pub fn current_level(slots: &SlotTable) -> i32 {
     slots.vec.iter().sum::<i32>() / (slots.vec.len() as i32)
 }
 
 // returns true if flattening did something
-pub fn flatten<const N: usize>(slots: &mut SlotTable<N>) -> bool {
+pub fn flatten(slots: &mut SlotTable) -> bool {
     let current = current_level(slots);
     let mut success = false;
     for x in slots.vec.iter_mut() {
@@ -163,7 +167,7 @@ pub fn flatten<const N: usize>(slots: &mut SlotTable<N>) -> bool {
     return success;
 }
 
-pub fn full_flatten<const N: usize>(slots: &mut SlotTable<N>) {
+pub fn full_flatten(slots: &mut SlotTable) {
     while flatten(slots) {
         // blank (this terminates, i swear)
     }
@@ -183,9 +187,13 @@ pub fn build_states<const N: usize>(config: &Configuration<N>, state: &MDPState<
     for msd in ALL_MSDS.iter() {
         for mean in config.powerful_cap..=config.pinnacle_cap-1 {
             if msd.iter().all(|x| (*x as PowerLevel) + mean < config.pinnacle_cap) {
+                let mut msd_arr = [0; 8];
+                for i in 0..msd_arr.len() {
+                    msd_arr[i] = msd[i] as i8;
+                }
                 let se = StateEntry { 
                     mean: mean as u16,
-                    mean_slot_deviation: SmallVec::from_iter(msd.iter().map(|x| *x as i8)),
+                    mean_slot_deviation: msd_arr,
                     available_actions: actions.clone()
                 };
                 select_action(config, state, se);
