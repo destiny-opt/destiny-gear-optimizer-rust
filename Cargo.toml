@@ -12,3 +12,6 @@ lazy_static = "1.4.0"
 [dependencies.smallvec]
 version = "1.4.0"
 features = ["union", "const_generics"]
+
+[profile.release]
+debug = true
