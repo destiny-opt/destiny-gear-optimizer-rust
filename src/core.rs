@@ -68,7 +68,7 @@ pub fn select_action(config: &Configuration, full_state: &FullMDPState, se: &Sta
     }
 
     Some(full_state.get(available_actions).and_then(|x| x.get(se).map(|elem| *elem))
-        .expect(&format!("We technically support {:?}/{:?} having no entry, but it really shouldn't be", available_actions, se))
+        .expect("Assert failed: value requested that was not computed. This isn't critical, but important for debugging.")
     )
 }
 
