@@ -24,41 +24,35 @@ pub fn compositions(n: u8, k: usize) -> Vec<Vec<u8>>  {
     return output;
 }
 
-/// Actions up to some cap
-pub fn ranked_actions(cap: &Vec<u8>) -> Vec<HashSet<Vec<u8>>> {
+/// Actions up to some cap, verified by a valid function
+pub fn ranked_actions<F>(len: usize, upper: u8, valid: F) -> Vec<HashSet<Vec<u8>>> 
+    where F: Fn(usize, &Vec<u8>) -> bool {
 
-    let upper = cap.iter().sum();
     // ordered [1..upper]
-    let mut result = Vec::with_capacity(cap.iter().sum::<u8>() as usize);
+    let mut result = Vec::with_capacity(upper as usize);
 
     for i in 1..=upper {
-        result.push(go(cap, i));
+        result.push(go(len, upper, &valid, i));
     }
 
     
-    fn go(cap: &Vec<u8>, n: u8) -> HashSet<Vec<u8>> {
-        let sum: u8 = cap.iter().sum();
+    fn go<F>(len: usize, upper: u8, valid: &F, n: u8) -> HashSet<Vec<u8>>
+        where F: Fn(usize, &Vec<u8>) -> bool {
 
         let mut output: HashSet<Vec<u8>> = HashSet::new();
 
         // only one 0-sum
         if n == 0 {
-            output.insert(vec![0; cap.len()]);
+            output.insert(vec![0; len]);
             return output;
         }
 
-        // only one (sum cap)-sum
-        if n == sum {
-            output.insert(cap.to_vec());
-            return output;
-        }
-
-        let previous = go(cap, n-1);
+        let previous = go(len, upper, valid, n-1);
 
         for elem in previous {
-            for i in 0..cap.len() {
+            for i in 0..len {
                 let mut new_elem = elem.clone();
-                if new_elem[i] < cap[i] {
+                if valid(i, &new_elem) {
                     new_elem[i] += 1;
                     output.insert(new_elem);
                 }

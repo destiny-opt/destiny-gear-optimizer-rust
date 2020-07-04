@@ -11,6 +11,7 @@ pub type PowerLevel = i16;
 
 pub struct Configuration {
     pub actions : Vec<Action>,
+    pub powerful_start : PowerLevel,
     pub powerful_cap : PowerLevel,
     pub pinnacle_cap : PowerLevel,
 

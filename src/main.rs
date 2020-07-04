@@ -22,13 +22,14 @@ fn main() {
 	let raid3_pmf   = [ 1.0/3.0, 1.0/3.0, 0.0,     0.0,     0.0,     1.0/3.0, 0.0,     0.0     ];
     let raid4_pmf   = [ 0.0,     1.0/3.0, 0.0,     0.0,     1.0/3.0, 0.0,     0.0,     0.0     ];
     
+    let powerful_start = 1046;
     let powerful_cap = 1050;
     let pinnacle_cap = 1060;
 
     let all_entries: Vec<StateEntry> = {
         let mut entries = Vec::new();
         for msd in ALL_MSDS.iter() {
-            for mean in powerful_cap..pinnacle_cap {
+            for mean in powerful_start..pinnacle_cap {
                 if msd.iter().all(|x| (*x as PowerLevel) + mean <= pinnacle_cap) {
                     let msd_arr = i8x8::from_cast(u8x8::from_slice_aligned(msd.as_slice()));
                     entries.push(StateEntry { 
@@ -42,6 +43,7 @@ fn main() {
     };
 
     let config = Configuration {
+        powerful_start: powerful_start,
         powerful_cap: powerful_cap,
         pinnacle_cap: pinnacle_cap,
         actions: vec![
@@ -57,8 +59,18 @@ fn main() {
         all_entries: all_entries
     };
 
-    let cap = config.actions.iter().map(|x| x.arity ).collect();
-    let ranks = utils::ranked_actions(&cap);
+    let cap: Vec<u8> = config.actions.iter().map(|x| x.arity ).collect();
+
+    // hacky way to encode all possible raid challenges. this needs to be refactored
+    let ranks = utils::ranked_actions(cap.len(), cap.iter().sum(), |i, xs| {
+        if i < 3 { 
+            xs[i] < cap[i] 
+        } else {
+            let (_, raids) = xs.split_at(3);            
+            xs[i] < 1 || (xs[i] == 1 && raids.iter().filter(|x| **x > 1).count() == 0)
+        }
+    });
+
     
     let mut progress = 0;
     let total = ranks.iter().map(|x| x.len()).sum::<usize>();
