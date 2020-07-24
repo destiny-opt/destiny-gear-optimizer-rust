@@ -1,3 +1,8 @@
+#![feature(option_expect_none)]
+#![feature(const_generics)]
+#![feature(const_generic_impls_guard)]
+
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -6,69 +11,27 @@ use std::collections::HashMap;
 
 use rayon::prelude::*;
 
-use packed_simd::*;
-
 pub mod core;
 mod utils;
 
 use crate::core::*;
 
+use std::array::LengthAtMost32; // temporary until its removed
 
-fn main() {
-    let default_pmf = [ 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0 ];
-    let armor_pmf   = [ 0.0,     0.0,     0.0,     1.0/5.0, 1.0/5.0, 1.0/5.0, 1.0/5.0, 1.0/5.0 ];
-    let raid1_pmf   = [ 1.0/3.0, 1.0/3.0, 0.0,     0.0,     0.0,     0.0,     1.0/3.0, 0.0     ];
-	let raid2_pmf   = [ 0.0    , 1.0/2.0, 0.0,     0.0,     1.0/2.0, 0.0,     0.0,     0.0     ];
-	let raid3_pmf   = [ 1.0/3.0, 1.0/3.0, 0.0,     0.0,     0.0,     1.0/3.0, 0.0,     0.0     ];
-    let raid4_pmf   = [ 0.0,     1.0/3.0, 0.0,     0.0,     1.0/3.0, 0.0,     0.0,     0.0     ];
-    
-    let powerful_start = 1046;
-    let powerful_cap = 1050;
-    let pinnacle_cap = 1060;
 
-    let all_entries: Vec<StateEntry> = {
-        let mut entries = Vec::new();
-        for msd in ALL_MSDS.iter() {
-            for mean in powerful_start..pinnacle_cap {
-                if msd.iter().all(|x| (*x as PowerLevel) + mean <= pinnacle_cap) {
-                    let msd_arr = i8x8::from_cast(u8x8::from_slice_aligned(msd.as_slice()));
-                    entries.push(StateEntry { 
-                        mean: mean as u16,
-                        mean_slot_deviation: msd_arr
-                    })
-                }
-            }
-        }
-        entries
-    };
-
-    let config = Configuration {
-        powerful_start: powerful_start,
-        powerful_cap: powerful_cap,
-        pinnacle_cap: pinnacle_cap,
-        actions: vec![
-            Action { powerful_gain: 5, pinnacle_gain: 1, arity: 4, pmf: default_pmf },
-            Action { powerful_gain: 5, pinnacle_gain: 2, arity: 3, pmf: default_pmf },
-            Action { powerful_gain: 5, pinnacle_gain: 2, arity: 2, pmf: armor_pmf },
-
-            Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid1_pmf },
-            Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid2_pmf },
-            Action { powerful_gain: 5, pinnacle_gain: 2, arity: 2, pmf: raid3_pmf },
-            Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid4_pmf },
-        ],
-        all_entries: all_entries
-    };
+fn generate_state<const N: usize>(config: Configuration<N>) -> Solver<N> 
+  where ActionArity<N>: LengthAtMost32, [Action; N]: LengthAtMost32 {
 
     let cap: Vec<u8> = config.actions.iter().map(|x| x.arity ).collect();
 
     // hacky way to encode all possible raid challenges. this needs to be refactored
     let ranks = utils::ranked_actions(cap.len(), cap.iter().sum(), |i, xs| {
-        if i < 3 { 
+        //if i < 3 { 
             xs[i] < cap[i] 
-        } else {
-            let (_, raids) = xs.split_at(3);            
-            xs[i] < 1 || (xs[i] == 1 && raids.iter().filter(|x| **x > 1).count() == 0)
-        }
+        //} else {
+        //    let (_, raids) = xs.split_at(3);            
+        //    xs[i] < 1 || (xs[i] == 1 && raids.iter().filter(|x| **x > 1).count() == 0)
+        //}
     });
 
     
@@ -77,22 +40,61 @@ fn main() {
 
     let full_state = DashMap::with_capacity(total); // 10: power levels, 6435: k-combinations; just quick and dirty..
 
+    let mut solver = Solver { config: config, state: full_state };
 
-    let se_len = config.all_entries.len();
+    let se_len = solver.config.all_entries.len();
 
     for acts in ranks {
         acts.par_iter().for_each(|act| {
-            let mut actarr = ActionArity::splat(0);
+            let mut actarr = [0; N];
             for i in 0..act.len() {
-                actarr = actarr.replace(i, act[i] as i8);
+                actarr[i] = act[i] as i8;
             }
             let mut current_state: CurrentMDPState = HashMap::with_capacity(se_len);
-            build_states(&config, &full_state, &mut current_state, &actarr);
+            solver.build_states(&mut current_state, &actarr);
             //current_state.shrink_to_fit();
-            full_state.insert(actarr, current_state);
+            solver.state.insert(actarr, current_state);
         });
         progress += acts.len();
         println!("Actions: {}/{}", progress, total);
     }
-    println!("State size: {:?}", full_state.len() * config.all_entries.len());
+    println!("State size: {:?}", solver.state.len() * solver.config.all_entries.len());
+
+    return solver;
+
+}
+
+
+
+fn main() {
+    
+    let default_pmf = [ 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0 ];
+    let armor_pmf   = [ 0.0,     0.0,     0.0,     1.0/5.0, 1.0/5.0, 1.0/5.0, 1.0/5.0, 1.0/5.0 ];
+    let raid1_pmf   = [ 1.0/3.0, 1.0/3.0, 0.0,     0.0,     0.0,     0.0,     1.0/3.0, 0.0     ];
+    let raid2_pmf   = [ 0.0    , 1.0/2.0, 0.0,     0.0,     1.0/2.0, 0.0,     0.0,     0.0     ];
+    let raid3_pmf   = [ 1.0/3.0, 1.0/3.0, 0.0,     0.0,     0.0,     1.0/3.0, 0.0,     0.0     ];
+    let raid4_pmf   = [ 0.0,     1.0/3.0, 0.0,     0.0,     1.0/3.0, 0.0,     0.0,     0.0     ];
+
+    let actions = [
+        Action { powerful_gain: 5, pinnacle_gain: 1, arity: 4, pmf: default_pmf },
+        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 3, pmf: default_pmf },
+        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 2, pmf: armor_pmf },
+
+        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid1_pmf },
+        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid2_pmf },
+        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 2, pmf: raid3_pmf },
+        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid4_pmf },
+    ];
+
+    let config = Configuration::make_config(1047, 1050, 1060, actions);
+    let solver = generate_state(config);
+
+    let submap = solver.state.get(&[0, 0, 0, 1, 1, 2, 1]).unwrap();
+    let st = submap.get(&StateEntry {
+        mean: 1059,
+        mean_slot_deviation: [1,1,1,1,1,1,0,0]
+    }).unwrap();
+
+    println!("{:?}", st);
+    
 }
