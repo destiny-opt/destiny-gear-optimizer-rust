@@ -70,29 +70,28 @@ fn main() {
     
     let default_pmf = [ 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0, 1.0/8.0 ];
     let armor_pmf   = [ 0.0,     0.0,     0.0,     1.0/5.0, 1.0/5.0, 1.0/5.0, 1.0/5.0, 1.0/5.0 ];
-    let raid1_pmf   = [ 1.0/3.0, 1.0/3.0, 0.0,     0.0,     0.0,     0.0,     1.0/3.0, 0.0     ];
-    let raid2_pmf   = [ 0.0    , 1.0/2.0, 0.0,     0.0,     1.0/2.0, 0.0,     0.0,     0.0     ];
-    let raid3_pmf   = [ 1.0/3.0, 1.0/3.0, 0.0,     0.0,     0.0,     1.0/3.0, 0.0,     0.0     ];
-    let raid4_pmf   = [ 0.0,     1.0/3.0, 0.0,     0.0,     1.0/3.0, 0.0,     0.0,     0.0     ];
+    let raid1_pmf   = [ 0.0,     1.0/4.0, 0.0,     0.0,     1.0/4.0, 0.0,     1.0/4.0, 1.0/4.0 ];
+    let raid2_pmf   = [ 0.0,     1.0/4.0, 0.0,     0.0,     1.0/4.0, 1.0/4.0, 0.0,     1.0/4.0 ];
+    let raid3_pmf   = [ 1.0/4.0, 0.0,     0.0,     0.0,     1.0/4.0, 0.0,     1.0/4.0, 1.0/4.0 ];
+    let raid4_pmf   = [ 0.0,     0.0,     1.0/4.0, 1.0/4.0, 0.0,     1.0/4.0, 1.0/4.0, 0.0     ];
 
     let actions = [
         Action { powerful_gain: 5, pinnacle_gain: 1, arity: 4, pmf: default_pmf },
-        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 3, pmf: default_pmf },
-        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 2, pmf: armor_pmf },
+        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 4, pmf: default_pmf },
 
         Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid1_pmf },
         Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid2_pmf },
-        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 2, pmf: raid3_pmf },
+        Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid3_pmf },
         Action { powerful_gain: 5, pinnacle_gain: 2, arity: 1, pmf: raid4_pmf },
     ];
 
-    let config = Configuration::make_config(1047, 1050, 1060, actions);
+    let config = Configuration::make_config(1247, 1250, 1260, actions);
     let solver = generate_state(config);
 
-    let submap = solver.state.get(&[0, 0, 0, 1, 1, 2, 1]).unwrap();
+    let submap = solver.state.get(&[4,4,1,1,1,1]).unwrap();
     let st = submap.get(&StateEntry {
-        mean: 1059,
-        mean_slot_deviation: [1,1,1,1,1,1,0,0]
+        mean: 1256,
+        mean_slot_deviation: [1,1,2,0,1,0,2,0]
     }).unwrap();
 
     println!("{:?}", st);
